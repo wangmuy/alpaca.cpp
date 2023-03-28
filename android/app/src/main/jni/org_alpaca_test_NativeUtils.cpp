@@ -35,6 +35,35 @@ JNIEXPORT jboolean JNICALL Java_org_alpaca_test_NativeUtils_loadModel(
     return JNI_TRUE;
 }
 
+jstring utf8_decode(JNIEnv* env, const std::string& str) {
+    const char* cstr = str.c_str();
+    jobject byteBuf = env->NewDirectByteBuffer((void *) cstr, strlen(cstr));
+    jclass cls_Charset = env->FindClass("java/nio/charset/Charset");
+    jmethodID mid_Charset_forName = env->GetStaticMethodID(cls_Charset, "forName", "(Ljava/lang/String;)Ljava/nio/charset/Charset;");
+    jobject charset = env->CallStaticObjectMethod(cls_Charset, mid_Charset_forName, env->NewStringUTF("UTF-8"));
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    jmethodID mid_Charset_decode = env->GetMethodID(cls_Charset, "decode", "(Ljava/nio/ByteBuffer;)Ljava/nio/CharBuffer;");
+    jobject charBuf = env->CallObjectMethod(charset, mid_Charset_decode, byteBuf);
+    env->DeleteLocalRef(byteBuf);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    jclass cls_CharBuffer = env->FindClass("java/nio/CharBuffer");
+    jmethodID mid_CharBuffer_toString = env->GetMethodID(cls_CharBuffer, "toString", "()Ljava/lang/String;");
+    jstring jstr = static_cast<jstring>(env->CallObjectMethod(charBuf, mid_CharBuffer_toString));
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    return jstr;
+}
+
 JNIEXPORT jstring JNICALL Java_org_alpaca_test_NativeUtils_getAnswer
         (JNIEnv* env, jclass obj, jstring question, jobject jniCb)
 {
@@ -46,7 +75,7 @@ JNIEXPORT jstring JNICALL Java_org_alpaca_test_NativeUtils_getAnswer
             if (env->ExceptionOccurred()) {
                 return;
             }
-            jstring newStr = env->NewStringUTF(str.c_str());
+            jstring newStr = utf8_decode(env, str);
             env->CallVoidMethod(jniCb, onEmitId, newStr, (jint)st);
         };
     }
@@ -60,7 +89,7 @@ JNIEXPORT jstring JNICALL Java_org_alpaca_test_NativeUtils_getAnswer
     auto answer = gChatBot->get_answer(q, st, cb);
     jstring ret;
     if (st == ST_OK) {
-        ret = env->NewStringUTF(answer.c_str());
+        ret = utf8_decode(env, answer);
     } else {
         char buf[32];
         sprintf(buf, "error: %d", st);

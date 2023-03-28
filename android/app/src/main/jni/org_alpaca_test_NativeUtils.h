@@ -5,10 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/*
- * Method:    getCString
- * Signature: ()Ljava/lang/String;
- */
+
 JNIEXPORT jboolean JNICALL Java_org_alpaca_test_NativeUtils_loadModel
 (JNIEnv*, jclass, jstring modelPath);
 
