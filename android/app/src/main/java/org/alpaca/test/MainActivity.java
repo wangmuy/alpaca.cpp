@@ -11,10 +11,13 @@ import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
 import java.util.function.Consumer;
@@ -75,27 +78,65 @@ public class MainActivity extends AppCompatActivity {
         mHT.start();
         mModelHandler = new ModelHandler(mHT.getLooper());
 
-        TextView tv = (TextView)findViewById(R.id.textview);
-        Button btnLoadModel = (Button)findViewById(R.id.btnLoadModel);
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+        ChatItem.CHATS.clear();
+        ChatAdapter adapter = new ChatAdapter(ChatItem.CHATS);
+        recyclerView.setAdapter(adapter);
+
+        TextView tv = findViewById(R.id.textview);
+        Button btnLoadModel = findViewById(R.id.btnLoadModel);
         btnLoadModel.setOnClickListener(v -> {
             Message msg = Message.obtain();
             msg.what = ModelHandler.MSG_LOAD_MODEL;
             msg.obj = new File(getFilesDir(), "ggml-alpaca-7b-q4.bin");
             mModelHandler.sendMessage(msg);
         });
-        Button btnGetAnswer = (Button)findViewById(R.id.btnGetAnswer);
+
+        EditText editQuestion = findViewById(R.id.editQuestion);
+
+        Button btnGetAnswer = findViewById(R.id.btnGetAnswer);
         btnGetAnswer.setOnClickListener(v -> {
+            if (mSb.length() > 0) {
+                mSb.delete(0, mSb.length());
+            }
+            tv.setText("");
+            String question = editQuestion.getText().toString();
+            editQuestion.setText("");
+            if (question.trim().length() == 0) {
+                tv.setText("please input something other than blanks");
+                return;
+            }
+
+            ChatItem questionItem = new ChatItem();
+            questionItem.name = ChatItem.NAME_ME;
+            questionItem.sentence = question;
+            ChatItem.CHATS.add(0, questionItem);
+            adapter.notifyItemInserted(0);
+            recyclerView.scrollToPosition(0);
+
             Message msg = Message.obtain();
             msg.what = ModelHandler.MSG_GET_ANSWER;
             ModelHandler.GetAnswerObj obj = new ModelHandler.GetAnswerObj();
-            obj.question = "Tell me a joke.";
+            obj.question = question;
             obj.appContext = getApplicationContext();
             obj.cb = (NativeUtils.EmitCallback) (newStr, status) -> {
                 Log.d(TAG, "onEmit: newStr=" + newStr + ", status=" + status);
                 mSb.append(newStr);
-                String allStr = mSb.toString();
+                String soFar = mSb.toString();
                 runOnUiThread(() -> {
-                    tv.setText(allStr);
+                    tv.setText(soFar);
+                });
+            };
+            obj.answerCb = answer -> {
+                runOnUiThread(() -> {
+                    tv.setText("");
+                    ChatItem answerItem = new ChatItem();
+                    answerItem.name = ChatItem.NAME_BOT;
+                    answerItem.sentence = answer;
+                    ChatItem.CHATS.add(0, answerItem);
+                    adapter.notifyItemInserted(0);
+                    recyclerView.scrollToPosition(0);
                 });
             };
             msg.obj = obj;
