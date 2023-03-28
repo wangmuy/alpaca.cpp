@@ -106,6 +106,8 @@ endif()
 
 add_executable(chat
     chat.cpp
+    lib.cpp
+    lib.h
     utils.cpp
     utils.h)
 
