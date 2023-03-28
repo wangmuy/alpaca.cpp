@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <functional>
 #include <map>
 #include <cstdio>
 #include <string>
@@ -84,3 +85,45 @@ bool llama_eval(
         const std::vector<gpt_vocab::id> & embd_inp,
               std::vector<float>         & embd_w,
               size_t                     & mem_per_token);
+
+enum BotStatus {
+    ST_UNKNOWN = 0,
+    ST_OK = 1,
+    ST_FAILED = -1
+};
+
+class ChatBot {
+public:
+    ChatBot(
+        const gpt_params& params,
+        const char* instruct_str = " Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n",
+        const char* prompt_str = "### Instruction:\n\n",
+        const char* response_str = "### Response:\n\n"
+    );
+    ~ChatBot();
+    BotStatus load_model();
+    std::string get_answer(const std::string& question, BotStatus& infer_status,
+        std::function<void(const std::string&, const BotStatus&)> emitCallback);
+    inline BotStatus status() { return load_status_; }
+
+private:
+    BotStatus load_status_;
+    gpt_params params_;
+    std::mt19937 rng_;
+    gpt_vocab vocab_;
+    llama_model model_;
+    int n_past_;
+    std::vector<float> logits_;
+    std::vector<gpt_vocab::id> embd_inp_;
+    std::vector<gpt_vocab::id> embd_;
+    size_t mem_per_token_;
+    std::vector<gpt_vocab::id> last_n_tokens_;
+    int input_consumed_;
+
+    const char* instruct_str_;
+    const char* prompt_str_;
+    const char* response_str_;
+    std::vector<gpt_vocab::id> instruct_inp_;
+    std::vector<gpt_vocab::id> prompt_inp_;
+    std::vector<gpt_vocab::id> response_inp_;
+};

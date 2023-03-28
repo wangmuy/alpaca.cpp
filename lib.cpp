@@ -4,9 +4,11 @@
 #include "ggml.h"
 #include "lib.h"
 
+#define DEBUG false
+
 // load the model's weights from a file
 bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx) {
-    fprintf(stderr, "%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
+    if(DEBUG) fprintf(stderr, "%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
 
     std::vector<char> f_buf(1024*1024);
 
@@ -246,7 +248,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
             fname_part += "." + std::to_string(i);
         }
 
-        fprintf(stderr, "%s: loading model part %d/%d from '%s'\n", __func__, i+1, n_parts, fname_part.c_str());
+        if (DEBUG) fprintf(stderr, "%s: loading model part %d/%d from '%s'\n", __func__, i+1, n_parts, fname_part.c_str());
 
         fin = std::ifstream(fname_part, std::ios::binary);
         fin.rdbuf()->pubsetbuf(f_buf.data(), f_buf.size());
@@ -257,7 +259,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
             int n_tensors = 0;
             size_t total_size = 0;
 
-            fprintf(stderr, "%s: ", __func__);
+            if (DEBUG) fprintf(stderr, "%s: ", __func__);
 
             while (true) {
                 int32_t n_dims;
@@ -427,9 +429,9 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
                 }
             }
 
-            fprintf(stderr, " done\n");
+            if (DEBUG) fprintf(stderr, " done\n");
 
-            fprintf(stderr, "%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
+            if (DEBUG) fprintf(stderr, "%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
         }
 
         fin.close();
@@ -672,4 +674,124 @@ bool llama_eval(
     ggml_free(ctx0);
 
     return true;
+}
+
+ChatBot::ChatBot(const gpt_params& params, const char* instruct_str, const char* prompt_str, const char* response_str):
+load_status_(ST_UNKNOWN), params_(params), rng_(params.seed), n_past_(0), mem_per_token_(0),
+last_n_tokens_(std::vector<gpt_vocab::id>(params.repeat_last_n)), input_consumed_(0),
+instruct_str_(instruct_str), prompt_str_(prompt_str), response_str_(response_str) {
+    ggml_time_init();
+}
+
+BotStatus ChatBot::load_model() {
+    if (load_status_ == ST_OK) {
+        return load_status_;
+    }
+    if (!llama_model_load(params_.model, model_, vocab_, params_.n_ctx)) {
+        load_status_ = ST_FAILED;
+        return load_status_;
+    }
+
+    // determine the required inference memory per token:
+    llama_eval(model_, params_.n_threads, 0, { 0, 1, 2, 3 }, logits_, mem_per_token_);
+    if (mem_per_token_ <= 0) {
+        load_status_ = ST_FAILED;
+        return load_status_;
+    }
+
+    instruct_inp_ = ::llama_tokenize(vocab_, instruct_str_, true);
+    prompt_inp_ = ::llama_tokenize(vocab_, prompt_str_, true);
+    response_inp_ = ::llama_tokenize(vocab_, response_str_, false);
+
+    embd_inp_.insert(embd_inp_.end(), instruct_inp_.begin(), instruct_inp_.end());
+    std::fill(last_n_tokens_.begin(), last_n_tokens_.end(), 0);
+
+    load_status_ = ST_OK;
+    return load_status_;
+}
+
+ChatBot::~ChatBot() {
+    if (load_status_ == ST_OK) {
+        ggml_free(model_.ctx);
+        if (DEBUG) printf("ChatBot dtor done\n");
+    }
+}
+
+std::string ChatBot::get_answer(const std::string& question, BotStatus& infer_status,
+    std::function<void(const std::string&, const BotStatus&)> emitCallback) {
+    // below invariant: is_interacting == true
+    embd_inp_.insert(embd_inp_.end(), prompt_inp_.begin(), prompt_inp_.end());
+
+    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(vocab_, question, false);
+    embd_inp_.insert(embd_inp_.end(), line_inp.begin(), line_inp.end());
+    embd_inp_.insert(embd_inp_.end(), response_inp_.begin(), response_inp_.end());
+
+    // below invariant: is_interacting == false
+    bool done = false;
+    std::vector<gpt_vocab::id> answer_ids;
+    infer_status = ST_OK;
+
+    while (!done) {
+        // predict
+        if (embd_.size() > 0) {
+            if (!llama_eval(model_, params_.n_threads, n_past_, embd_, logits_, mem_per_token_)) {
+                fprintf(stderr, "Failed to predict\n");
+                infer_status = ST_FAILED;
+                emitCallback("", infer_status);
+                done = true;
+                continue;
+            }
+        }
+
+        n_past_ += embd_.size();
+        embd_.clear();
+
+        if (embd_inp_.size() <= input_consumed_) {
+            // out of user input, sample next token
+            const float top_k = params_.top_k;
+            const float top_p = params_.top_p;
+            const float temp  = params_.temp;
+            const float repeat_penalty = params_.repeat_penalty;
+
+            const int n_vocab = model_.hparams.n_vocab;
+
+            gpt_vocab::id id = 0;
+
+            {
+                id = llama_sample_top_p_top_k(vocab_, logits_.data() + (logits_.size() - n_vocab), last_n_tokens_, repeat_penalty, top_k, top_p, temp, rng_);
+                last_n_tokens_.erase(last_n_tokens_.begin());
+                last_n_tokens_.push_back(id);
+            }
+
+            // add it to the context
+            embd_.push_back(id);
+            answer_ids.push_back(id);
+            std::string token = vocab_.id_to_token[id];
+            emitCallback(token, infer_status);
+        } else {
+            // some user input remains from prompt or interaction, forward it to processing
+            while (embd_inp_.size() > input_consumed_) {
+                embd_.push_back(embd_inp_[input_consumed_]);
+                last_n_tokens_.erase(last_n_tokens_.begin());
+                last_n_tokens_.push_back(embd_inp_[input_consumed_]);
+                ++input_consumed_;
+                if (embd_.size() > params_.n_batch) {
+                    break;
+                }
+            }
+        }
+
+        // end of text token
+        if (embd_.back() == 2) {
+            done = true;
+        }
+    }
+
+    std::string ret = "";
+    if (infer_status == ST_OK) {
+        for (auto id : answer_ids) {
+            ret += vocab_.id_to_token[id];
+        }
+    }
+    return ret;
 }
