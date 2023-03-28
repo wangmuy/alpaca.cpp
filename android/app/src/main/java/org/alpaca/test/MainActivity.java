@@ -19,6 +19,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -123,11 +124,6 @@ public class MainActivity extends AppCompatActivity {
         mHT.start();
         mModelHandler = new ModelHandler(mHT.getLooper());
 
-        String perm = Manifest.permission.READ_EXTERNAL_STORAGE;
-        if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{perm}, REQ_READ_EXTERNAL_STORAGE);
-        }
-
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         ChatItem.CHATS.clear();
@@ -216,5 +212,19 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        String perm = Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{perm}, REQ_READ_EXTERNAL_STORAGE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_READ_EXTERNAL_STORAGE
+                && (grantResults.length == 0 || grantResults[0] == PackageManager.PERMISSION_DENIED)) {
+            Toast.makeText(this, "Loading model in downloads requires external storage permission", Toast.LENGTH_SHORT).show();
+        }
     }
 }
