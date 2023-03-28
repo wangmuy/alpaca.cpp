@@ -698,6 +698,7 @@ BotStatus ChatBot::load_model() {
         load_status_ = ST_FAILED;
         return load_status_;
     }
+    if (DEBUG) fprintf(stderr, " mem_per_token_=%ld\n", mem_per_token_);
 
     instruct_inp_ = ::llama_tokenize(vocab_, instruct_str_, true);
     prompt_inp_ = ::llama_tokenize(vocab_, prompt_str_, true);

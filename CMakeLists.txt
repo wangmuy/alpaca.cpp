@@ -104,9 +104,12 @@ endif()
 #     set(LLAMA_EXTRA_FLAGS ${LLAMA_EXTRA_FLAGS} -DGGML_PERF)
 # endif()
 
+add_library(chatbase
+    lib.cpp
+    lib.h)
+
 add_executable(chat
     chat.cpp
-    lib.cpp
     lib.h
     utils.cpp
     utils.h)
@@ -127,4 +130,4 @@ target_compile_definitions(quantize PUBLIC ${LLAMA_EXTRA_FLAGS})
 target_link_libraries(ggml PRIVATE ${LLAMA_EXTRA_LIBS})
 target_include_directories(ggml PUBLIC .)
 target_link_libraries(quantize PRIVATE ggml)
-target_link_libraries(chat PRIVATE ggml)
+target_link_libraries(chat PRIVATE ggml chatbase)
