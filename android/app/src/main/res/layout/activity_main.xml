@@ -6,20 +6,23 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <LinearLayout
-        android:orientation="horizontal"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
         <Button
             android:id="@+id/btnLoadModel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="start"
             android:text="loadModel" />
-        <TextView
-            android:id="@+id/textLoadModel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/mockSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:checked="false"
+            android:text="mock" />
+    </FrameLayout>
 
     <LinearLayout
         android:orientation="horizontal"
