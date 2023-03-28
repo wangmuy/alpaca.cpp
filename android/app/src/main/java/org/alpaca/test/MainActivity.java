@@ -96,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         if (!modelLoaded) {
                             obj.cb.onEmit("Please load model first.", StatusFailed);
+                            obj.progressBar.setVisibility(View.INVISIBLE);
                             return;
                         }
                         answer = NativeUtils.getAnswer(question, obj.cb);
