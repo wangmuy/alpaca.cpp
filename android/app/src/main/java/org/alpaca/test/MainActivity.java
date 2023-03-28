@@ -4,15 +4,20 @@ package org.alpaca.test;
 import static org.alpaca.test.Const.PREFIX;
 import static org.alpaca.test.NativeUtils.StatusFailed;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -35,10 +40,12 @@ public class MainActivity extends AppCompatActivity {
         public static final int MSG_GET_ANSWER = 2;
         public static final int MSG_SET_MOCK = 3;
 
-        private boolean mock = true;
+        private boolean mock = false;
 
         public static class LoadModelObj {
+            MainActivity activity;
             TextView tv;
+            ProgressBar progressBar;
             File file;
         }
         public static class GetAnswerObj {
@@ -46,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
             Consumer<String> answerCb;
             NativeUtils.EmitCallback cb;
             Context appContext;
+            ProgressBar progressBar;
         }
 
         private boolean modelLoaded = false;
@@ -59,18 +67,20 @@ public class MainActivity extends AppCompatActivity {
             switch (msg.what) {
                 case MSG_LOAD_MODEL: {
                     LoadModelObj obj = (LoadModelObj) msg.obj;
+                    File file = obj.file;
                     String str;
                     if (mock) {
                         str = "loadModel but set to mock, ignore";
                     } else {
                         if (!modelLoaded) {
-                            modelLoaded = NativeUtils.loadModel((File) obj.file);
+                            modelLoaded = NativeUtils.loadModel(file);
                             str = "loadModel ret=" + modelLoaded;
                         } else {
                             str = "loadModel already loaded";
                         }
                     }
                     obj.tv.post(() -> {
+                        obj.progressBar.setVisibility(View.INVISIBLE);
                         obj.tv.setText(str);
                     });
                     Log.d(TAG, str);
@@ -93,6 +103,7 @@ public class MainActivity extends AppCompatActivity {
                     if (obj.answerCb != null) {
                         obj.answerCb.accept(answer);
                     }
+                    obj.progressBar.setVisibility(View.INVISIBLE);
                 }
                 break;
                 case MSG_SET_MOCK: {
@@ -103,6 +114,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private Handler mModelHandler;
+    private static final int REQ_READ_EXTERNAL_STORAGE = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,6 +123,11 @@ public class MainActivity extends AppCompatActivity {
         mHT.start();
         mModelHandler = new ModelHandler(mHT.getLooper());
 
+        String perm = Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{perm}, REQ_READ_EXTERNAL_STORAGE);
+        }
+
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         ChatItem.CHATS.clear();
@@ -118,14 +135,19 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
 
         TextView tv = findViewById(R.id.textview);
+        ProgressBar progressBar = findViewById(R.id.progress);
 
         Button btnLoadModel = findViewById(R.id.btnLoadModel);
         btnLoadModel.setOnClickListener(v -> {
+            progressBar.setVisibility(View.VISIBLE);
             Message msg = Message.obtain();
             msg.what = ModelHandler.MSG_LOAD_MODEL;
             ModelHandler.LoadModelObj obj = new ModelHandler.LoadModelObj();
+            obj.activity = MainActivity.this;
             obj.tv = tv;
-            obj.file = new File(getFilesDir(), "ggml-alpaca-7b-q4.bin");
+            obj.progressBar = progressBar;
+            File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            obj.file = new File(downloadDir, "ggml-alpaca-7b-q4.bin");
             msg.obj = obj;
             mModelHandler.sendMessage(msg);
         });
@@ -145,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
             if (mSb.length() > 0) {
                 mSb.delete(0, mSb.length());
             }
+            progressBar.setVisibility(View.VISIBLE);
             tv.setText("");
             String question = editQuestion.getText().toString();
             editQuestion.setText("");
@@ -184,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
                     recyclerView.scrollToPosition(0);
                 });
             };
+            obj.progressBar = progressBar;
             msg.obj = obj;
             mModelHandler.sendMessage(msg);
         });
