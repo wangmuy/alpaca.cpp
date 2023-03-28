@@ -136,6 +136,7 @@ public class MainActivity extends AppCompatActivity {
 
         Button btnLoadModel = findViewById(R.id.btnLoadModel);
         btnLoadModel.setOnClickListener(v -> {
+            Log.d(TAG, "load model clicked");
             progressBar.setVisibility(View.VISIBLE);
             Message msg = Message.obtain();
             msg.what = ModelHandler.MSG_LOAD_MODEL;
@@ -172,6 +173,7 @@ public class MainActivity extends AppCompatActivity {
                 tv.setText("please input something other than blanks");
                 return;
             }
+            Log.d(TAG, "getAnswer question=" + question);
 
             ChatItem questionItem = new ChatItem();
             questionItem.name = ChatItem.NAME_ME;
