@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project("alpaca.cpp")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_C_STANDARD 11)
 
@@ -104,30 +104,33 @@ endif()
 #     set(LLAMA_EXTRA_FLAGS ${LLAMA_EXTRA_FLAGS} -DGGML_PERF)
 # endif()
 
-add_library(chatbase
-    lib.cpp
-    lib.h)
-
-add_executable(chat
-    chat.cpp
-    lib.h
-    utils.cpp
-    utils.h)
-
-add_executable(quantize
-    quantize.cpp
-    utils.cpp
-    utils.h)
+set(ALPACA_BUILD_TYPE "app" CACHE STRING "app or lib")
 
 add_library(ggml
+    STATIC
     ggml.c
     ggml.h)
-
 target_compile_definitions(ggml PUBLIC ${LLAMA_EXTRA_FLAGS})
-target_compile_definitions(chat PUBLIC ${LLAMA_EXTRA_FLAGS})
-target_compile_definitions(quantize PUBLIC ${LLAMA_EXTRA_FLAGS})
-
 target_link_libraries(ggml PRIVATE ${LLAMA_EXTRA_LIBS})
 target_include_directories(ggml PUBLIC .)
-target_link_libraries(quantize PRIVATE ggml)
-target_link_libraries(chat PRIVATE ggml chatbase)
+
+add_library(chatbase
+    STATIC
+    lib.cpp
+    utils.cpp)
+
+if ("${ALPACA_BUILD_TYPE}" STREQUAL "app")
+    add_executable(chat
+        chat.cpp)
+
+    add_executable(quantize
+        quantize.cpp
+        utils.cpp)
+
+    target_compile_definitions(chat PUBLIC ${LLAMA_EXTRA_FLAGS})
+    target_compile_definitions(quantize PUBLIC ${LLAMA_EXTRA_FLAGS})
+    target_link_libraries(quantize PRIVATE ggml)
+    target_link_libraries(chat PRIVATE ggml chatbase)
+else()
+    target_link_libraries(chatbase PRIVATE ggml)
+endif()

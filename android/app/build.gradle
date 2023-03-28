@@ -1,0 +1,69 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion "30.0.3"
+/*
+    signingConfigs {
+        release {
+            try {
+                storeFile file(STORE_FILE)
+                storePassword STORE_PASSWORD
+                keyAlias KEY_ALIAS
+                keyPassword KEY_PASSWORD
+            } catch(e) {
+                throw new InvalidUserDataException("define STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD in gradle.properties")
+            }
+        }
+    }
+*/
+    defaultConfig {
+        applicationId "org.alpaca.test"
+        minSdkVersion 19
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_ARM_NEON=TRUE", "-DANDROID_TOOLCHAIN=clang"
+//                cFlags "-D_EXAMPLE_C_FLAG1", "-D_EXAMPLE_C_FLAG2"
+                cppFlags "-D__STDC_FORMAT_MACROS"
+            }
+        }
+
+        ndk {
+            //moduleName "NativeUtils" // in Android.mk
+            abiFilters "arm64-v8a"
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+//            version "3.18.1"
+            path 'src/main/jni/CMakeLists.txt'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    buildTypes.all {
+        //buildType -> buildType.signingConfig = signingConfigs.release
+    }
+}
+
+dependencies {
+    compileOnly fileTree(dir: 'extlibs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    testImplementation 'junit:junit:4.13.2'
+    implementation "androidx.appcompat:appcompat:1.3.0"
+    androidTestImplementation "androidx.test:core:1.3.0"
+    androidTestImplementation "androidx.test:runner:1.3.0"
+    androidTestImplementation "androidx.test.ext:junit:1.1.2"
+}
